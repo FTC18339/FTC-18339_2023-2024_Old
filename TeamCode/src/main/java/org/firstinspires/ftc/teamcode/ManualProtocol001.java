@@ -36,6 +36,8 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.qualcomm.robotcore.util.Range;
 
+import com.qualcomm.robotcore.hardware.DcMotor;
+
 /**
  * This file contains an minimal example of a Linear "OpMode". An OpMode is a 'program' that runs in either
  * the autonomous or the teleop period of an FTC match. The names of OpModes appear on the menu
@@ -50,65 +52,56 @@ import com.qualcomm.robotcore.util.Range;
  */
 
 @TeleOp(name="Manual Protocol 001", group="Linear OpMode")
-@Disabled
 public class ManualProtocol001 extends Main001 {
-
-    // Declare OpMode members.
-    private ElapsedTime runtime = new ElapsedTime();
-    private DcMotor leftDrive = null;
-    private DcMotor rightDrive = null;
+    private double left_front_power = 0;
+    private double right_front_power = 0;
+    private double left_back_power = 0;
+    private double right_back_power = 0;
 
     @Override
     public void runOpMode() {
-        telemetry.addData("Status", "Initialized");
-        telemetry.update();
+        initMaths();
+        initHardware();
+        initManualModes();
 
-        // Initialize the hardware variables. Note that the strings used here as parameters
-        // to 'get' must correspond to the names assigned during the robot configuration
-        // step (using the FTC Robot Controller app on the phone).
-        leftDrive  = hardwareMap.get(DcMotor.class, "left_drive");
-        rightDrive = hardwareMap.get(DcMotor.class, "right_drive");
-
-        // To drive forward, most robots need the motor on one side to be reversed, because the axles point in opposite directions.
-        // Pushing the left stick forward MUST make robot go forward. So adjust these two lines based on your first test drive.
-        // Note: The settings here assume direct drive on left and right wheels.  Gear Reduction or 90 Deg drives may require direction flips
-        leftDrive.setDirection(DcMotor.Direction.REVERSE);
-        rightDrive.setDirection(DcMotor.Direction.FORWARD);
-
-        // Wait for the game to start (driver presses PLAY)
         waitForStart();
-        runtime.reset();
 
-        // run until the end of the match (driver presses STOP)
-        while (opModeIsActive()) {
+        if (opModeIsActive()) {
+            while (opModeIsActive()) {
+                setMotorForces();
 
-            // Setup a variable for each drive wheel to save power level for telemetry
-            double leftPower;
-            double rightPower;
+                telemetry.update();
 
-            // Choose to drive using either Tank Mode, or POV Mode
-            // Comment out the method that's not used.  The default below is POV.
-
-            // POV Mode uses left stick to go forward, and right stick to turn.
-            // - This uses basic math to combine motions and is easier to drive straight.
-            double drive = -gamepad1.left_stick_y;
-            double turn  =  gamepad1.right_stick_x;
-            leftPower    = Range.clip(drive + turn, -1.0, 1.0) ;
-            rightPower   = Range.clip(drive - turn, -1.0, 1.0) ;
-
-            // Tank Mode uses one stick to control each wheel.
-            // - This requires no math, but it is hard to drive forward slowly and keep straight.
-            // leftPower  = -gamepad1.left_stick_y ;
-            // rightPower = -gamepad1.right_stick_y ;
-
-            // Send calculated power to wheels
-            leftDrive.setPower(leftPower);
-            rightDrive.setPower(rightPower);
-
-            // Show the elapsed game time and wheel power.
-            telemetry.addData("Status", "Run Time: " + runtime.toString());
-            telemetry.addData("Motors", "left (%.2f), right (%.2f)", leftPower, rightPower);
-            telemetry.update();
+                idle();
+            }
         }
+    }
+
+    public void setMotorForces() {
+        if(!noNullHardware()) return;
+
+        double gamepadOneLeftX = gamepad1.left_stick_x;
+        double gamepadOneLeftY = gamepad1.left_stick_y;
+
+        double rAxis = gamepad1.right_trigger - gamepad1.left_trigger;
+
+        int quad = math.getQuad(gamepadOneLeftX, gamepadOneLeftY);
+        double theta = math.theta(gamepadOneLeftX, gamepadOneLeftY, quad);
+        double z = (double) Math.sqrt(Math.pow(gamepadOneLeftX, 2) + Math.pow(gamepadOneLeftY, 2)) * math.wheelControlMultiplier;
+
+        left_front_power = -math.getWheelForceManual(gamepadOneLeftX, gamepadOneLeftY, 1, rAxis, theta, z);
+        right_front_power = math.getWheelForceManual(gamepadOneLeftX, gamepadOneLeftY, 2, rAxis, theta, z);
+        left_back_power = -math.getWheelForceManual(gamepadOneLeftX, gamepadOneLeftY, 3, rAxis, theta, z);
+        right_back_power = math.getWheelForceManual(gamepadOneLeftX, gamepadOneLeftY, 4, rAxis, theta, z);
+
+        telemetry.addData("lpb", left_back_power + " q: " + quad + " theta: " + theta + "x: " + gamepadOneLeftX + "y: " + gamepadOneLeftY + "x2: " + gamepad1.right_stick_x);
+        telemetry.addData("lpf", left_front_power);
+        telemetry.addData("rpb", right_back_power);
+        telemetry.addData("rpf", right_front_power);
+
+        left_front.setVelocity(left_front_power * MAX_NUM_TICKS_MOVEMENT * MOVEMENT_RPM);
+        right_front.setVelocity(right_front_power * MAX_NUM_TICKS_MOVEMENT * MOVEMENT_RPM);
+        left_back.setVelocity(left_back_power * MAX_NUM_TICKS_MOVEMENT * MOVEMENT_RPM);
+        right_back.setVelocity(right_back_power * MAX_NUM_TICKS_MOVEMENT * MOVEMENT_RPM);
     }
 }
